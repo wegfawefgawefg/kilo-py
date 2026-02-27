@@ -27,7 +27,11 @@ def open_file(state: State) -> None:
 
 def save_file(state: State) -> None:
     text = "".join(f"{line}\n" for line in state.rows)
-    with open(state.filename, "w", encoding="utf-8", newline="") as f:
-        f.write(text)
+    try:
+        with open(state.filename, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+    except OSError as exc:
+        set_status(state, f"Can't save! I/O error: {exc}")
+        return
     state.dirty = False
     set_status(state, f"{len(text.encode('utf-8'))} bytes written to disk")

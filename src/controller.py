@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from editor_actions import (
+from actions import (
     delete_char,
     insert_char,
     insert_newline,
@@ -13,13 +13,12 @@ from editor_actions import (
     move_left,
     move_right,
     move_up,
-    noop,
     page_down,
     page_up,
 )
-from editor_io import open_file, resize, save_file, set_status
-from editor_render import refresh_screen
-from editor_search import find
+from io_ops import open_file, resize, save_file, set_status
+from render import refresh_screen
+from search import find
 from model import (
     ARROW_DOWN,
     ARROW_LEFT,
@@ -58,18 +57,14 @@ def confirm_or_quit(state: State) -> bool:
     return True
 
 
-def safe_save(state: State) -> None:
-    try:
-        save_file(state)
-    except OSError as exc:
-        set_status(state, f"Can't save! I/O error: {exc}")
-
-
 def process_keypress(state: State) -> bool:
     c = read_key(state.stdin_fd)
 
     if c == CTRL_Q:
         return confirm_or_quit(state)
+    if c in IGNORED_KEYS:
+        state.quit_times = KILO_QUIT_TIMES
+        return False
 
     handler = KEY_HANDLERS.get(c)
     if handler is not None:
@@ -82,12 +77,11 @@ def process_keypress(state: State) -> bool:
 
 
 KEY_HANDLERS: dict[int, Callable[[State], None]] = {
-    CTRL_S: safe_save,
+    CTRL_S: save_file,
     CTRL_F: find,
     CTRL_A: move_home,
     CTRL_E: move_end,
     CTRL_H: delete_char,
-    CTRL_L: noop,
     HOME_KEY: move_home,
     END_KEY: move_end,
     PAGE_UP: page_up,
@@ -96,9 +90,11 @@ KEY_HANDLERS: dict[int, Callable[[State], None]] = {
     DEL_KEY: delete_char,
     ENTER: insert_newline,
     TAB: insert_tab,
-    ESC: noop,
     ARROW_UP: move_up,
     ARROW_DOWN: move_down,
     ARROW_LEFT: move_left,
     ARROW_RIGHT: move_right,
 }
+
+
+IGNORED_KEYS = {CTRL_L, ESC}

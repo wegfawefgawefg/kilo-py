@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from editor_io import set_status
-from editor_render import refresh_screen
+from io_ops import set_status
+from render import refresh_screen
 from model import (
     ARROW_DOWN,
     ARROW_LEFT,

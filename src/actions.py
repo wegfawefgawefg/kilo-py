@@ -102,7 +102,3 @@ def page_down(state: State) -> None:
 
 def insert_tab(state: State) -> None:
     insert_char(state, "    ")
-
-
-def noop(_state: State) -> None:
-    return

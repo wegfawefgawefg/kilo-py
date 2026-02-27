@@ -3,7 +3,7 @@ from __future__ import annotations
 import signal
 import sys
 
-from editor import open_file, process_keypress, refresh_screen, resize, set_status
+from controller import open_file, process_keypress, refresh_screen, resize, set_status
 from model import State
 from terminal import RawMode
 

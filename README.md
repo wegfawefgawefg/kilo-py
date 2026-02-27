@@ -2,6 +2,11 @@
 
 Minimal terminal text editor inspired by Kilo, written in Python.
 
+## Intent
+- Python-first and maintainable over strict 1:1 C parity.
+- Keep the editor small, usable, and easy to reason about.
+- Preserve core workflow (`open`, `edit`, `save`, `find`, `quit`) without chasing every low-level C edge case.
+
 ## Run
 ```bash
 python3 src/main.py <filename>

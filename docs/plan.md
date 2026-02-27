@@ -1,71 +1,42 @@
-# kilo-py Plan (Kilo LISP)
+# kilo-py Plan
 
 ## Goal
-Implement a Python version of Kilo LISP semantics, not the Kilo text editor.
+Build a minimal, usable terminal text editor in Python inspired by Kilo.
 
-## How Minimal Kilo LISP Is
-- Purely symbolic language.
-- Only two data types: atom (symbol) and pair/list.
-- Truth values: `T` (true) and `NIL` (false/empty list).
-- Lexical scope, tail call elimination, macros, image files.
+## Scope
+- Core editing workflow:
+  - open file
+  - edit text
+  - save file
+  - search in file
+  - quit with unsaved-change protection
+- Keep code simple and understandable.
+- Keep terminal behavior practical for common Linux/macOS terminals.
 
-## Language Keywords To Support
-Core special forms:
-- `APPLY`
-- `IF`
-- `IFNOT`
-- `LAMBDA`
-- `PROG`
-- `QUOTE`
-- `SETQ`
+## Non-Goals
+- Exact byte-for-byte parity with `ref/kilo.c`.
+- Full syntax highlighting parity with upstream Kilo.
+- Advanced editor features (multi-buffer, undo tree, plugins, LSP, etc.).
 
-Derived forms:
-- `LET`
-- `LABELS`
-- `COND`
-- `AND`
-- `OR`
-- `QQUOTE`
-- `LOOP`
+## Current Architecture
+- `src/main.py`:
+  - process startup, TTY checks, event loop wiring.
+- `src/model.py`:
+  - editor state dataclasses and key/constants.
+- `src/terminal.py`:
+  - raw mode and key decoding.
+- `src/io_ops.py`:
+  - resize, file open/save, status messages.
+- `src/render.py`:
+  - screen and status/message bar rendering.
+- `src/actions.py`:
+  - cursor movement and text mutations.
+- `src/search.py`:
+  - find-mode state machine.
+- `src/controller.py`:
+  - key dispatch and top-level input handling.
 
-## Predefined Functions To Support
-Primitive:
-- `ATOM`, `CAR`, `CDR`, `CONS`, `EQ`, `EOFP`, `ERROR`, `GC`, `GENSYM`, `LOAD`, `PRIN`, `PRIN1`, `PRINT`, `READ`, `SETCAR`, `SETCDR`, `SUSPEND`
-
-Derived:
-- `ASSOC`, `CAAR ... CDDDR`, `CONC`, `EQUAL`, `LIST`, `MAP`, `MEMB`, `NOT`, `NCONC`, `NRECONC`, `NREVER`, `NULL`, `RECONC`, `REVER`
-
-## Reader Syntax Features
-- `'x` -> `(QUOTE x)`
-- `@x` -> `(QQUOTE x)`
-- `,x` -> `(UNQUOTE x)`
-- `,@x` -> `(SPLICE x)`
-- `#xyz` -> `(QUOTE (x y z))`
-
-## Python Implementation Milestones
-1. Data model and reader
-   - Symbol interning.
-   - Pair/cons cell representation.
-   - Parser for dotted pairs and sugar forms.
-2. Evaluator core
-   - Environments and lexical scoping.
-   - Core special forms with correct evaluation rules.
-3. Function layer
-   - Primitive functions.
-   - Derived functions/forms from a bootstrap prelude.
-4. Runtime
-   - REPL.
-   - `(LOAD ...)`.
-   - Suspend/save image hook points (can be stubbed first).
-5. Verification
-   - Golden tests for reader, evaluator, and macro behavior.
-   - Tail-call stress tests.
-
-## Suggested Layout
-- `src/main.py` - CLI entrypoint + REPL
-- `src/reader.py` - tokenization/parser
-- `src/runtime.py` - symbols, pairs, printer
-- `src/eval.py` - evaluator + special forms
-- `src/primitives.py` - primitive builtins
-- `src/prelude.kl` - derived forms/functions
-- `tests/` - unit and integration tests
+## Quality Bar
+- Behavior should be predictable and safe (especially save/quit).
+- Modules should stay focused by responsibility.
+- Prefer clear function names and direct control flow over abstractions.

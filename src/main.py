@@ -7,6 +7,7 @@ import sys
 import termios
 import time
 from dataclasses import dataclass, field
+from typing import Callable
 
 KILO_VERSION = "0.1.0-py"
 KILO_QUIT_TIMES = 3
@@ -33,9 +34,36 @@ ANSI_CLEAR_LINE = "\x1b[K"
 ANSI_INVERT_ON = "\x1b[7m"
 ANSI_INVERT_OFF = "\x1b[m"
 
+CSI_SIMPLE_MAP = {
+    ord("A"): ARROW_UP,
+    ord("B"): ARROW_DOWN,
+    ord("C"): ARROW_RIGHT,
+    ord("D"): ARROW_LEFT,
+    ord("H"): HOME_KEY,
+    ord("F"): END_KEY,
+}
+CSI_TILDE_MAP = {
+    ord("3"): DEL_KEY,
+    ord("5"): PAGE_UP,
+    ord("6"): PAGE_DOWN,
+}
+SS3_SIMPLE_MAP = {
+    ord("H"): HOME_KEY,
+    ord("F"): END_KEY,
+}
+
 
 def ctrl(ch: str) -> int:
     return ord(ch.upper()) & 0x1F
+
+
+CTRL_Q = ctrl("q")
+CTRL_S = ctrl("s")
+CTRL_F = ctrl("f")
+CTRL_A = ctrl("a")
+CTRL_E = ctrl("e")
+CTRL_H = ctrl("h")
+CTRL_L = ctrl("l")
 
 
 class RawMode:
@@ -76,36 +104,26 @@ def read_key(fd: int) -> int:
     a, b = seq0[0], seq1[0]
 
     if a == ord("["):
+        simple = CSI_SIMPLE_MAP.get(b)
+        if simple is not None:
+            return simple
         if ord("0") <= b <= ord("9"):
             seq2 = os.read(fd, 1)
             if not seq2:
                 return ESC
             if seq2[0] == ord("~"):
-                if b == ord("3"):
-                    return DEL_KEY
-                if b == ord("5"):
-                    return PAGE_UP
-                if b == ord("6"):
-                    return PAGE_DOWN
-        else:
-            if b == ord("A"):
-                return ARROW_UP
-            if b == ord("B"):
-                return ARROW_DOWN
-            if b == ord("C"):
-                return ARROW_RIGHT
-            if b == ord("D"):
-                return ARROW_LEFT
-            if b == ord("H"):
-                return HOME_KEY
-            if b == ord("F"):
-                return END_KEY
+                return CSI_TILDE_MAP.get(b, ESC)
     elif a == ord("O"):
-        if b == ord("H"):
-            return HOME_KEY
-        if b == ord("F"):
-            return END_KEY
+        return SS3_SIMPLE_MAP.get(b, ESC)
     return ESC
+
+
+@dataclass
+class SearchSnapshot:
+    cx: int
+    cy: int
+    coloff: int
+    rowoff: int
 
 
 @dataclass
@@ -125,6 +143,30 @@ class Editor:
     statusmsg: str = ""
     status_time: float = 0.0
     quit_times: int = KILO_QUIT_TIMES
+    key_handlers: dict[int, Callable[[], None]] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.key_handlers = {
+            CTRL_S: self._safe_save,
+            CTRL_F: self.find,
+            CTRL_A: self._home,
+            CTRL_E: self._end,
+            CTRL_H: self.delete_char,
+            CTRL_L: self._noop,
+            ARROW_UP: self._move_up,
+            ARROW_DOWN: self._move_down,
+            ARROW_LEFT: self._move_left,
+            ARROW_RIGHT: self._move_right,
+            HOME_KEY: self._home,
+            END_KEY: self._end,
+            PAGE_UP: self._page_up,
+            PAGE_DOWN: self._page_down,
+            BACKSPACE: self.delete_char,
+            DEL_KEY: self.delete_char,
+            ENTER: self.insert_newline,
+            TAB: self._insert_tab,
+            ESC: self._noop,
+        }
 
     def resize(self) -> None:
         size = shutil.get_terminal_size((80, 24))
@@ -200,12 +242,13 @@ class Editor:
         rstatus = f"{self.cy + 1}/{max(1, len(self.rows))}"
         out.append(ANSI_INVERT_ON)
         out.append(status)
-        while len(status) < self.screencols:
-            if self.screencols - len(status) == len(rstatus):
+        fill = len(status)
+        while fill < self.screencols:
+            if self.screencols - fill == len(rstatus):
                 out.append(rstatus)
                 break
             out.append(" ")
-            status += " "
+            fill += 1
         out.append(ANSI_INVERT_OFF)
         out.append("\r\n")
 
@@ -227,26 +270,40 @@ class Editor:
 
     def move_cursor(self, key: int) -> None:
         if key == ARROW_LEFT:
-            if self.cx > 0:
-                self.cx -= 1
-            elif self.cy > 0:
-                self.cy -= 1
-                self.cx = len(self.rows[self.cy])
+            self._move_left()
         elif key == ARROW_RIGHT:
-            rowlen = self.row_len()
-            if self.cx < rowlen:
-                self.cx += 1
-            elif self.cy + 1 < len(self.rows):
-                self.cy += 1
-                self.cx = 0
-        elif key == ARROW_UP and self.cy > 0:
-            self.cy -= 1
-        elif key == ARROW_DOWN and self.cy + 1 < len(self.rows):
-            self.cy += 1
+            self._move_right()
+        elif key == ARROW_UP:
+            self._move_up()
+        elif key == ARROW_DOWN:
+            self._move_down()
 
         rowlen = self.row_len()
         if self.cx > rowlen:
             self.cx = rowlen
+
+    def _move_left(self) -> None:
+        if self.cx > 0:
+            self.cx -= 1
+        elif self.cy > 0:
+            self.cy -= 1
+            self.cx = len(self.rows[self.cy])
+
+    def _move_right(self) -> None:
+        rowlen = self.row_len()
+        if self.cx < rowlen:
+            self.cx += 1
+        elif self.cy + 1 < len(self.rows):
+            self.cy += 1
+            self.cx = 0
+
+    def _move_up(self) -> None:
+        if self.cy > 0:
+            self.cy -= 1
+
+    def _move_down(self) -> None:
+        if self.cy + 1 < len(self.rows):
+            self.cy += 1
 
     def insert_char(self, c: str) -> None:
         if self.cy == len(self.rows):
@@ -311,36 +368,83 @@ class Editor:
     def _page_down(self) -> None:
         self.cy = min(max(0, len(self.rows) - 1), self.cy + self.screenrows)
 
+    def _insert_tab(self) -> None:
+        self.insert_char("    ")
+
+    def _noop(self) -> None:
+        return
+
+    def _restore_search_snapshot(self, saved: SearchSnapshot) -> None:
+        self.cx = saved.cx
+        self.cy = saved.cy
+        self.coloff = saved.coloff
+        self.rowoff = saved.rowoff
+
+    def _search_key_update(
+        self,
+        c: int,
+        query: str,
+        last_match: int,
+        direction: int,
+    ) -> tuple[str, int, int, str]:
+        if c in (BACKSPACE, CTRL_H, DEL_KEY):
+            if query:
+                query = query[:-1]
+                last_match = -1
+            return query, last_match, direction, "continue"
+        if c == ESC:
+            return query, last_match, direction, "cancel"
+        if c == ENTER:
+            return query, last_match, direction, "accept"
+        if c in (ARROW_RIGHT, ARROW_DOWN):
+            return query, last_match, 1, "search"
+        if c in (ARROW_LEFT, ARROW_UP):
+            return query, last_match, -1, "search"
+        if 32 <= c <= 126:
+            return query + chr(c), -1, direction, "search"
+        return query, last_match, direction, "continue"
+
+    def _search_next_match(self, query: str, last_match: int, direction: int) -> tuple[int, int] | None:
+        current = last_match
+        for _ in range(len(self.rows)):
+            current += direction
+            if current == -1:
+                current = len(self.rows) - 1
+            elif current == len(self.rows):
+                current = 0
+            pos = self.rows[current].find(query)
+            if pos != -1:
+                return current, pos
+        return None
+
+    def _jump_to_match(self, row: int, col: int) -> None:
+        self.cy = row
+        self.cx = col
+        self.rowoff = row
+        self.coloff = 0
+
     def find(self) -> None:
         query = ""
         last_match = -1
         direction = 1
-        saved = (self.cx, self.cy, self.coloff, self.rowoff)
+        saved = SearchSnapshot(self.cx, self.cy, self.coloff, self.rowoff)
 
         while True:
             self.set_status(f"Search: {query} (ESC/Arrows/Enter)")
             self.refresh_screen()
             c = read_key(self.stdin_fd)
 
-            if c in (BACKSPACE, ctrl("h"), DEL_KEY):
-                if query:
-                    query = query[:-1]
-                    last_match = -1
-            elif c == ESC:
-                self.cx, self.cy, self.coloff, self.rowoff = saved
+            query, last_match, direction, action = self._search_key_update(
+                c, query, last_match, direction
+            )
+            if action == "cancel":
+                self._restore_search_snapshot(saved)
                 self.set_status("")
                 return
-            elif c == ENTER:
+            if action == "accept":
                 self.set_status("")
                 return
-            elif c in (ARROW_RIGHT, ARROW_DOWN):
-                direction = 1
-            elif c in (ARROW_LEFT, ARROW_UP):
-                direction = -1
-            elif 32 <= c <= 126:
-                query += chr(c)
-                last_match = -1
-            else:
+            if action != "search":
                 continue
 
             if not query or not self.rows:
@@ -348,50 +452,25 @@ class Editor:
             if last_match == -1:
                 direction = 1
 
-            current = last_match
-            for _ in range(len(self.rows)):
-                current += direction
-                if current == -1:
-                    current = len(self.rows) - 1
-                elif current == len(self.rows):
-                    current = 0
-                pos = self.rows[current].find(query)
-                if pos != -1:
-                    last_match = current
-                    self.cy = current
-                    self.cx = pos
-                    self.rowoff = self.cy
-                    self.coloff = 0
-                    break
+            match = self._search_next_match(query, last_match, direction)
+            if match is not None:
+                last_match, col = match
+                self._jump_to_match(last_match, col)
             direction = 0
 
     def process_keypress(self) -> None:
         c = read_key(self.stdin_fd)
-        key_handlers = {
-            ctrl("q"): self._confirm_or_quit,
-            ctrl("s"): self._safe_save,
-            ctrl("f"): self.find,
-            ctrl("a"): self._home,
-            ctrl("e"): self._end,
-            HOME_KEY: self._home,
-            END_KEY: self._end,
-            PAGE_UP: self._page_up,
-            PAGE_DOWN: self._page_down,
-            BACKSPACE: self.delete_char,
-            ctrl("h"): self.delete_char,
-            DEL_KEY: self.delete_char,
-            ENTER: self.insert_newline,
-            TAB: lambda: self.insert_char("    "),
-            ctrl("l"): lambda: None,
-            ESC: lambda: None,
-        }
-        handler = key_handlers.get(c)
+
+        if c == CTRL_Q:
+            self._confirm_or_quit()
+            return
+
+        handler = self.key_handlers.get(c)
         if handler is not None:
             handler()
-        elif c in (ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT):
-            self.move_cursor(c)
         elif 32 <= c <= 126:
             self.insert_char(chr(c))
+
         self.quit_times = KILO_QUIT_TIMES
 
 

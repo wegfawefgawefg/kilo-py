@@ -2,6 +2,8 @@
 
 Minimal terminal text editor inspired by Kilo, written in Python.
 
+![kilo-py screenshot](image.png)
+
 ## Intent
 - Python-first and maintainable over strict 1:1 C parity.
 - Keep the editor small, usable, and easy to reason about.

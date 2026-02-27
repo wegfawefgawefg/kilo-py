@@ -1,0 +1,14 @@
+{
+  "name": "backspace_merge_and_save",
+  "initial_text": "abc\ndef\n",
+  "actions": [
+    {"type": "key", "value": "DOWN"},
+    {"type": "key", "value": "END"},
+    {"type": "key", "value": "BACKSPACE"},
+    {"type": "key", "value": "CTRL_S"},
+    {"type": "key", "value": "CTRL_Q"}
+  ],
+  "assert_equal": ["file_bytes", "exit_summary"],
+  "timeout_s": 3.0,
+  "auto_quit_presses": 0
+}

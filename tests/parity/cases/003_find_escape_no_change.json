@@ -1,0 +1,13 @@
+{
+  "name": "find_escape_no_change",
+  "initial_text": "alpha\nbeta\ngamma\n",
+  "actions": [
+    {"type": "key", "value": "CTRL_F"},
+    {"type": "text", "value": "beta"},
+    {"type": "key", "value": "ESC"},
+    {"type": "key", "value": "CTRL_Q"}
+  ],
+  "assert_equal": ["file_bytes", "exit_summary"],
+  "timeout_s": 3.0,
+  "auto_quit_presses": 0
+}

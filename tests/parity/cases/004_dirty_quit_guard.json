@@ -1,0 +1,13 @@
+{
+  "name": "dirty_quit_guard",
+  "initial_text": "a\n",
+  "actions": [
+    {"type": "text", "value": "z"},
+    {"type": "key", "value": "CTRL_Q"},
+    {"type": "key", "value": "CTRL_Q"},
+    {"type": "key", "value": "CTRL_Q"}
+  ],
+  "assert_equal": ["file_bytes", "exit_summary"],
+  "timeout_s": 3.0,
+  "auto_quit_presses": 0
+}

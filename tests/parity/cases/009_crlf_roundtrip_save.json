@@ -1,0 +1,11 @@
+{
+  "name": "crlf_roundtrip_save",
+  "initial_bytes_hex": "610d0a620d0a",
+  "actions": [
+    {"type": "key", "value": "CTRL_S"},
+    {"type": "key", "value": "CTRL_Q"}
+  ],
+  "assert_equal": ["file_bytes", "exit_summary"],
+  "timeout_s": 3.0,
+  "auto_quit_presses": 0
+}

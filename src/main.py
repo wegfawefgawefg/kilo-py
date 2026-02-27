@@ -26,6 +26,13 @@ END_KEY = 1006
 PAGE_UP = 1007
 PAGE_DOWN = 1008
 
+ANSI_HIDE_CURSOR = "\x1b[?25l"
+ANSI_SHOW_CURSOR = "\x1b[?25h"
+ANSI_CURSOR_HOME = "\x1b[H"
+ANSI_CLEAR_LINE = "\x1b[K"
+ANSI_INVERT_ON = "\x1b[7m"
+ANSI_INVERT_OFF = "\x1b[m"
+
 
 def ctrl(ch: str) -> int:
     return ord(ch.upper()) & 0x1F
@@ -154,38 +161,44 @@ class Editor:
 
     def refresh_screen(self) -> None:
         self.scroll()
-        out: list[str] = ["\x1b[?25l", "\x1b[H"]
+        out: list[str] = [ANSI_HIDE_CURSOR, ANSI_CURSOR_HOME]
+        self._draw_rows(out)
+        self._draw_status_bar(out)
+        self._draw_message_bar(out)
+        out.append(self._cursor_escape())
+        out.append(ANSI_SHOW_CURSOR)
+        os.write(self.stdout_fd, "".join(out).encode("utf-8", errors="replace"))
 
+    def _draw_rows(self, out: list[str]) -> None:
         for y in range(self.screenrows):
             filerow = self.rowoff + y
-            if filerow >= len(self.rows):
-                if not self.rows and y == self.screenrows // 3:
-                    welcome = f"Kilo editor -- version {KILO_VERSION}"
-                    if len(welcome) > self.screencols:
-                        welcome = welcome[: self.screencols]
-                    pad = (self.screencols - len(welcome)) // 2
-                    if pad:
-                        out.append("~")
-                        pad -= 1
-                    if pad > 0:
-                        out.append(" " * pad)
-                    out.append(welcome)
-                else:
-                    out.append("~")
+            if filerow < len(self.rows):
+                out.append(self.rows[filerow][self.coloff : self.coloff + self.screencols])
+            elif not self.rows and y == self.screenrows // 3:
+                self._draw_welcome(out)
             else:
-                line = self.rows[filerow]
-                seg = line[self.coloff : self.coloff + self.screencols]
-                out.append(seg)
-            out.append("\x1b[K")
+                out.append("~")
+            out.append(ANSI_CLEAR_LINE)
             out.append("\r\n")
 
+    def _draw_welcome(self, out: list[str]) -> None:
+        welcome = f"Kilo editor -- version {KILO_VERSION}"
+        if len(welcome) > self.screencols:
+            welcome = welcome[: self.screencols]
+        pad = (self.screencols - len(welcome)) // 2
+        if pad:
+            out.append("~")
+            pad -= 1
+        if pad > 0:
+            out.append(" " * pad)
+        out.append(welcome)
+
+    def _draw_status_bar(self, out: list[str]) -> None:
         name = os.path.basename(self.filename) or "[No Name]"
         mod = " (modified)" if self.dirty else ""
-        status = f"{name:.20} - {len(self.rows)} lines{mod}"
+        status = f"{name:.20} - {len(self.rows)} lines{mod}"[: self.screencols]
         rstatus = f"{self.cy + 1}/{max(1, len(self.rows))}"
-        if len(status) > self.screencols:
-            status = status[: self.screencols]
-        out.append("\x1b[7m")
+        out.append(ANSI_INVERT_ON)
         out.append(status)
         while len(status) < self.screencols:
             if self.screencols - len(status) == len(rstatus):
@@ -193,26 +206,23 @@ class Editor:
                 break
             out.append(" ")
             status += " "
-        out.append("\x1b[m")
+        out.append(ANSI_INVERT_OFF)
         out.append("\r\n")
 
-        out.append("\x1b[K")
+    def _draw_message_bar(self, out: list[str]) -> None:
+        out.append(ANSI_CLEAR_LINE)
         if self.statusmsg and (time.time() - self.status_time) < 5:
             out.append(self.statusmsg[: self.screencols])
 
-        screen_cy = (self.cy - self.rowoff) + 1
-        screen_cx = (self.cx - self.coloff) + 1
-        if screen_cy < 1:
-            screen_cy = 1
-        if screen_cx < 1:
-            screen_cx = 1
-        out.append(f"\x1b[{screen_cy};{screen_cx}H")
-        out.append("\x1b[?25h")
-        os.write(self.stdout_fd, "".join(out).encode("utf-8", errors="replace"))
+    def _cursor_escape(self) -> str:
+        screen_cy = max(1, (self.cy - self.rowoff) + 1)
+        screen_cx = max(1, (self.cx - self.coloff) + 1)
+        return f"\x1b[{screen_cy};{screen_cx}H"
 
-    def current_row_len(self) -> int:
-        if 0 <= self.cy < len(self.rows):
-            return len(self.rows[self.cy])
+    def row_len(self, y: int | None = None) -> int:
+        y = self.cy if y is None else y
+        if 0 <= y < len(self.rows):
+            return len(self.rows[y])
         return 0
 
     def move_cursor(self, key: int) -> None:
@@ -223,7 +233,7 @@ class Editor:
                 self.cy -= 1
                 self.cx = len(self.rows[self.cy])
         elif key == ARROW_RIGHT:
-            rowlen = self.current_row_len()
+            rowlen = self.row_len()
             if self.cx < rowlen:
                 self.cx += 1
             elif self.cy + 1 < len(self.rows):
@@ -234,7 +244,7 @@ class Editor:
         elif key == ARROW_DOWN and self.cy + 1 < len(self.rows):
             self.cy += 1
 
-        rowlen = self.current_row_len()
+        rowlen = self.row_len()
         if self.cx > rowlen:
             self.cx = rowlen
 
@@ -273,6 +283,33 @@ class Editor:
             self.cy -= 1
             self.cx = prev_len
         self.dirty = True
+
+    def _confirm_or_quit(self) -> None:
+        if self.dirty and self.quit_times > 0:
+            self.set_status(
+                f"WARNING!!! Unsaved changes. Press Ctrl-Q {self.quit_times} more times to quit."
+            )
+            self.quit_times -= 1
+            return
+        raise SystemExit(0)
+
+    def _safe_save(self) -> None:
+        try:
+            self.save_file()
+        except OSError as exc:
+            self.set_status(f"Can't save! I/O error: {exc}")
+
+    def _home(self) -> None:
+        self.cx = 0
+
+    def _end(self) -> None:
+        self.cx = self.row_len()
+
+    def _page_up(self) -> None:
+        self.cy = max(0, self.cy - self.screenrows)
+
+    def _page_down(self) -> None:
+        self.cy = min(max(0, len(self.rows) - 1), self.cy + self.screenrows)
 
     def find(self) -> None:
         query = ""
@@ -330,39 +367,29 @@ class Editor:
 
     def process_keypress(self) -> None:
         c = read_key(self.stdin_fd)
-        if c == ctrl("q"):
-            if self.dirty and self.quit_times > 0:
-                self.set_status(
-                    f"WARNING!!! Unsaved changes. Press Ctrl-Q {self.quit_times} more times to quit."
-                )
-                self.quit_times -= 1
-                return
-            raise SystemExit(0)
-        if c == ctrl("s"):
-            try:
-                self.save_file()
-            except OSError as exc:
-                self.set_status(f"Can't save! I/O error: {exc}")
-        elif c == ctrl("f"):
-            self.find()
-        elif c in (HOME_KEY, ctrl("a")):
-            self.cx = 0
-        elif c in (END_KEY, ctrl("e")):
-            self.cx = self.current_row_len()
-        elif c == PAGE_UP:
-            self.cy = max(0, self.cy - self.screenrows)
-        elif c == PAGE_DOWN:
-            self.cy = min(max(0, len(self.rows) - 1), self.cy + self.screenrows)
+        key_handlers = {
+            ctrl("q"): self._confirm_or_quit,
+            ctrl("s"): self._safe_save,
+            ctrl("f"): self.find,
+            ctrl("a"): self._home,
+            ctrl("e"): self._end,
+            HOME_KEY: self._home,
+            END_KEY: self._end,
+            PAGE_UP: self._page_up,
+            PAGE_DOWN: self._page_down,
+            BACKSPACE: self.delete_char,
+            ctrl("h"): self.delete_char,
+            DEL_KEY: self.delete_char,
+            ENTER: self.insert_newline,
+            TAB: lambda: self.insert_char("    "),
+            ctrl("l"): lambda: None,
+            ESC: lambda: None,
+        }
+        handler = key_handlers.get(c)
+        if handler is not None:
+            handler()
         elif c in (ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT):
             self.move_cursor(c)
-        elif c in (BACKSPACE, ctrl("h"), DEL_KEY):
-            self.delete_char()
-        elif c == ENTER:
-            self.insert_newline()
-        elif c == TAB:
-            self.insert_char("    ")
-        elif c in (ctrl("l"), ESC):
-            pass
         elif 32 <= c <= 126:
             self.insert_char(chr(c))
         self.quit_times = KILO_QUIT_TIMES

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from io_ops import set_status
 from render import refresh_screen
-from model import (
+from consts import (
     ARROW_DOWN,
     ARROW_LEFT,
     ARROW_RIGHT,
@@ -16,9 +16,8 @@ from model import (
     SEARCH_CANCEL,
     SEARCH_CONTINUE,
     SEARCH_RUN,
-    SearchSnapshot,
-    State,
 )
+from state import SearchSnapshot, State
 from terminal import read_key
 
 
@@ -53,7 +52,9 @@ def search_key_update(
     return query, last_match, direction, SEARCH_CONTINUE
 
 
-def search_next_match(state: State, query: str, last_match: int, direction: int) -> tuple[int, int] | None:
+def search_next_match(
+    state: State, query: str, last_match: int, direction: int
+) -> tuple[int, int] | None:
     current = last_match
     for _ in range(len(state.rows)):
         current += direction
@@ -85,7 +86,9 @@ def find(state: State) -> None:
         refresh_screen(state)
         c = read_key(state.stdin_fd)
 
-        query, last_match, direction, action = search_key_update(c, query, last_match, direction)
+        query, last_match, direction, action = search_key_update(
+            c, query, last_match, direction
+        )
         if action == SEARCH_CANCEL:
             restore_search_snapshot(state, saved)
             set_status(state, "")

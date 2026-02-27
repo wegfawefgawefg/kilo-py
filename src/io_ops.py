@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import shutil
 
-from model import State
+from consts import State
 
 
 def resize(state: State) -> None:

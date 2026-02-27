@@ -4,7 +4,7 @@ import signal
 import sys
 
 from controller import open_file, process_keypress, refresh_screen, resize, set_status
-from model import State
+from consts import State
 from terminal import RawMode
 
 

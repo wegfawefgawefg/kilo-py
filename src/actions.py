@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from model import State
+from consts import State
 
 
 def row_len(state: State, y: int | None = None) -> int:

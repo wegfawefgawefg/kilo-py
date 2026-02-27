@@ -19,7 +19,7 @@ from actions import (
 from io_ops import open_file, resize, save_file, set_status
 from render import refresh_screen
 from search import find
-from model import (
+from consts import (
     ARROW_DOWN,
     ARROW_LEFT,
     ARROW_RIGHT,
@@ -40,9 +40,9 @@ from model import (
     KILO_QUIT_TIMES,
     PAGE_DOWN,
     PAGE_UP,
-    State,
     TAB,
 )
+from state import State
 from terminal import read_key
 
 

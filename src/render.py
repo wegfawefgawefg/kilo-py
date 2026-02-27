@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 
-from model import (
+from consts import (
     ANSI_CLEAR_LINE,
     ANSI_CURSOR_HOME,
     ANSI_HIDE_CURSOR,
@@ -11,8 +11,8 @@ from model import (
     ANSI_INVERT_ON,
     ANSI_SHOW_CURSOR,
     KILO_VERSION,
-    State,
 )
+from state import State
 
 
 def scroll(state: State) -> None:

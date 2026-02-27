@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import termios
 
-from model import (
+from consts import (
     CSI_SIMPLE_MAP,
     CSI_TILDE_MAP,
     ESC,
